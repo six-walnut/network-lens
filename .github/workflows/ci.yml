@@ -1,0 +1,39 @@
+name: macOS build and tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build native application
+        run: ./build.sh
+      - name: Deterministic tests
+        run: dist/NetworkLens.app/Contents/MacOS/NetworkLens --self-test
+      - name: Local HTTP integration tests
+        run: python3 Tests/test_http.py
+      - name: Verify bundle and signature
+        run: |
+          plutil -lint dist/NetworkLens.app/Contents/Info.plist
+          codesign --verify --deep --strict dist/NetworkLens.app
+      - name: Package app without personal data
+        run: ditto -c -k --sequesterRsrc --keepParent dist/NetworkLens.app dist/NetworkLens-macOS-$(uname -m).zip
+      - name: Upload build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: NetworkLens-${{ runner.arch }}
+          path: dist/NetworkLens-macOS-*.zip
+          if-no-files-found: error
+          retention-days: 14
